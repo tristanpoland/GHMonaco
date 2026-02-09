@@ -1,0 +1,35 @@
+#ghmonace-editor-container {
+  width: 100%;
+  min-height: 300px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #0d1117;
+  position: relative;
+}
+
+/* Ensure Monaco's internal elements don't bleed outside the container */
+#ghmonace-editor-container .monaco-editor {
+  border-radius: 6px;
+}
+
+/* Fix for Monaco scrollbar appearing outside container */
+#ghmonace-editor-container .monaco-editor .overflow-guard {
+  border-radius: 6px;
+}
+
+/* Override any GitHub styles that might interfere */
+#ghmonace-editor-container .monaco-editor .margin,
+#ghmonace-editor-container .monaco-editor .monaco-editor-background {
+  background-color: #0d1117 !important;
+}
+
+/* Ensure cursor visibility */
+#ghmonace-editor-container .monaco-editor .cursor {
+  visibility: visible !important;
+}
+
+/* Ensure the editor takes keyboard focus properly */
+#ghmonace-editor-container .monaco-editor textarea.inputarea {
+  opacity: 0 !important;
+}
