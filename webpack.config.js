@@ -42,9 +42,10 @@ module.exports = (env, argv) => ({
         { from: 'src/icons', to: 'icons', noErrorOnMissing: true },
       ],
     }),
-    // Set the public path at runtime so async chunks load from the extension URL
-    new webpack.DefinePlugin({
-      __CHROME_EXTENSION__: 'true',
+    // Merge all async chunks into their parent entries so nothing needs
+    // to be loaded at runtime (content script CSP blocks dynamic script tags).
+    new webpack.optimize.LimitChunkCountPlugin({
+      maxChunks: 7,
     }),
   ],
   optimization: {

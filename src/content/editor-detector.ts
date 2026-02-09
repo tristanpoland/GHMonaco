@@ -53,7 +53,7 @@ export function detectGitHubEditor(): GitHubEditorElements | null {
   const container = document.querySelector<HTMLElement>(EDITOR_SELECTORS.container);
   if (!container) return null;
 
-  // Find textarea
+  // Find textarea (important for syncing to enable commit button)
   const textarea = document.querySelector<HTMLTextAreaElement>(EDITOR_SELECTORS.textarea);
 
   // Find CodeMirror

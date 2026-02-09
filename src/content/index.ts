@@ -9,26 +9,40 @@ import { registerGitHubDarkTheme } from './github-dark-theme';
 import { detectGitHubEditor, observeFilenameChanges } from './editor-detector';
 import { injectMonacoEditor, updateLanguage, disposeMonacoEditor } from './monaco-injector';
 
-// Configure Monaco workers to use chrome.runtime.getURL for MV3 CSP compliance
+// Configure Monaco workers to load via fetch and create blob URLs
+// This is needed because content scripts can't load workers directly from chrome-extension://
 (self as any).MonacoEnvironment = {
-  getWorkerUrl(_moduleId: string, label: string): string {
+  getWorker(_moduleId: string, label: string): Worker {
+    // Fetch the worker script from the extension
+    const getWorkerUrl = (workerName: string): string => {
+      return chrome.runtime.getURL(`${workerName}.worker.js`);
+    };
+
+    let workerUrl: string;
     switch (label) {
       case 'json':
-        return chrome.runtime.getURL('json.worker.js');
+        workerUrl = getWorkerUrl('json');
+        break;
       case 'css':
       case 'scss':
       case 'less':
-        return chrome.runtime.getURL('css.worker.js');
+        workerUrl = getWorkerUrl('css');
+        break;
       case 'html':
       case 'handlebars':
       case 'razor':
-        return chrome.runtime.getURL('html.worker.js');
+        workerUrl = getWorkerUrl('html');
+        break;
       case 'typescript':
       case 'javascript':
-        return chrome.runtime.getURL('ts.worker.js');
+        workerUrl = getWorkerUrl('ts');
+        break;
       default:
-        return chrome.runtime.getURL('editor.worker.js');
+        workerUrl = getWorkerUrl('editor');
     }
+
+    // Fetch and create blob URL to bypass cross-origin restrictions
+    return new Worker(workerUrl);
   },
 };
 
@@ -41,22 +55,22 @@ let filenameObserver: MutationObserver | null = null;
 /**
  * Attempts to detect and replace GitHub's editor with Monaco.
  */
-function tryInjectEditor(): void {
+async function tryInjectEditor(): Promise<void> {
   if (initialized) return;
 
   const elements = detectGitHubEditor();
   if (!elements) return;
 
-  console.log('[GHMonace] Editor detected, injecting Monaco...');
-  const editor = injectMonacoEditor(elements);
+  console.log('[GHmonaco] Editor detected, injecting Monaco...');
+  const editor = await injectMonacoEditor(elements);
 
   if (editor) {
     initialized = true;
-    console.log('[GHMonace] Monaco editor injected successfully');
+    console.log('[GHmonaco] Monaco editor injected successfully');
 
     // Watch for filename changes to update language
     filenameObserver = observeFilenameChanges((filename) => {
-      console.log('[GHMonace] Filename changed:', filename);
+      console.log('[GHmonaco] Filename changed:', filename);
       updateLanguage(filename);
     });
   }
@@ -72,7 +86,7 @@ function cleanup(): void {
   filenameObserver?.disconnect();
   filenameObserver = null;
   initialized = false;
-  console.log('[GHMonace] Cleaned up');
+  console.log('[GHmonaco] Cleaned up');
 }
 
 // Initial attempt
