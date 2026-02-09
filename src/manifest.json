@@ -22,7 +22,9 @@
         "json.worker.js",
         "css.worker.js",
         "html.worker.js",
-        "ts.worker.js"
+        "ts.worker.js",
+        "chunks/*",
+        "*.ttf"
       ],
       "matches": ["https://github.com/*"]
     }
