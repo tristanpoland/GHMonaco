@@ -1,3 +1,7 @@
+// Set webpack public path so async chunks load from the extension URL
+declare var __webpack_public_path__: string;
+__webpack_public_path__ = chrome.runtime.getURL('/');
+
 import * as monaco from 'monaco-editor';
 import './styles.css';
 

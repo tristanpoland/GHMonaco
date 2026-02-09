@@ -1,7 +1,8 @@
 const path = require('path');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const webpack = require('webpack');
 
-module.exports = {
+module.exports = (env, argv) => ({
   entry: {
     content: './src/content/index.ts',
     'service-worker': './src/background/service-worker.ts',
@@ -14,6 +15,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: '[name].js',
+    chunkFilename: 'chunks/[name].js',
     clean: true,
     globalObject: 'self',
   },
@@ -40,9 +42,13 @@ module.exports = {
         { from: 'src/icons', to: 'icons', noErrorOnMissing: true },
       ],
     }),
+    // Set the public path at runtime so async chunks load from the extension URL
+    new webpack.DefinePlugin({
+      __CHROME_EXTENSION__: 'true',
+    }),
   ],
   optimization: {
     splitChunks: false,
   },
   devtool: false,
-};
+});
