@@ -35,76 +35,67 @@ export function parseRepoInfo(): FileInfo | null {
 }
 
 /**
- * Extract GitHub API token from the page.
- * GitHub uses tokens in localStorage and session storage.
+ * Extract auth from GitHub's own requests.
+ * We intercept GitHub's actual fetch requests to see what auth they use.
  */
-async function getGitHubToken(): Promise<string | null> {
-  // Try to get token from GitHub's session storage
-  try {
-    // GitHub stores session data in various places
-    const keys = Object.keys(sessionStorage);
-    for (const key of keys) {
-      if (key.includes('token') || key.includes('auth')) {
-        const value = sessionStorage.getItem(key);
-        if (value) {
-          try {
-            const parsed = JSON.parse(value);
-            if (parsed.token) return parsed.token;
-          } catch {
-            // Not JSON, might be raw token
-            if (value.startsWith('gho_') || value.startsWith('ghp_')) {
-              return value;
-            }
+let cachedAuthHeaders: Record<string, string> | null = null;
+
+function interceptGitHubFetch() {
+  if (cachedAuthHeaders) return; // Already intercepted
+
+  const originalFetch = window.fetch;
+  window.fetch = async function(...args: any[]) {
+    const [url, options] = args;
+    const response = await originalFetch.apply(this, args);
+    
+    // Check if this is a GitHub API request
+    if (typeof url === 'string' && url.includes('api.github.com')) {
+      const headers = options?.headers;
+      if (headers) {
+        // Extract Authorization header if present
+        const authHeaders: Record<string, string> = {};
+        if (headers instanceof Headers) {
+          const auth = headers.get('Authorization');
+          if (auth) authHeaders['Authorization'] = auth;
+        } else if (typeof headers === 'object') {
+          if ('Authorization' in headers) {
+            authHeaders['Authorization'] = (headers as any).Authorization;
           }
+        }
+        if (Object.keys(authHeaders).length > 0) {
+          cachedAuthHeaders = authHeaders;
+          console.log('[GHmonaco] Captured auth from GitHub request');
         }
       }
     }
-
-    // Try localStorage
-    const localKeys = Object.keys(localStorage);
-    for (const key of localKeys) {
-      if (key.includes('token') || key.includes('auth')) {
-        const value = localStorage.getItem(key);
-        if (value) {
-          try {
-            const parsed = JSON.parse(value);
-            if (parsed.token) return parsed.token;
-          } catch {
-            if (value.startsWith('gho_') || value.startsWith('ghp_')) {
-              return value;
-            }
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[GHmonaco] Error getting token:', err);
-  }
-
-  return null;
+    
+    return response;
+  };
 }
 
 /**
- * Make an authenticated fetch request to GitHub API without credentials.
- * Uses Authorization header instead to avoid CORS issues.
+ * Make an authenticated fetch request using same auth as GitHub.
+ * We use cookie-based auth (same as GitHub's own requests) which works because
+ * we're making requests from the same origin context.
  */
 async function githubApiFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = await getGitHubToken();
+  // Install fetch interceptor to learn GitHub's auth
+  interceptGitHubFetch();
   
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github.v3+json',
     ...options.headers as Record<string, string>,
   };
 
-  // Add auth header if we have a token
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  // Use captured auth headers if available
+  if (cachedAuthHeaders) {
+    Object.assign(headers, cachedAuthHeaders);
   }
 
   return fetch(url, {
     ...options,
     headers,
-    // Don't send credentials - this avoids CORS wildcard issue
+    credentials: 'include', // Send cookies - we're authenticated via session
   });
 }
 

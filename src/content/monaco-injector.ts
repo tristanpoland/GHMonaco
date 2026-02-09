@@ -11,6 +11,7 @@ const HIDDEN_ATTR = 'data-ghmonaco-hidden';
 
 let currentEditor: monaco.editor.IStandaloneCodeEditor | null = null;
 let currentDisposables: monaco.IDisposable[] = [];
+let originalContent: string = ''; // Store original content for diff checking
 
 /**
  * Hide an element and tag it so we can restore later.
@@ -132,11 +133,13 @@ export async function injectMonacoEditor(
   const content = await getFileContent(repoInfo);
   if (content !== null) {
     editor.setValue(content);
+    originalContent = content; // Store for diff checking
     editor.updateOptions({ readOnly: false });
     console.log('[GHmonaco] Loaded', content.split('\n').length, 'lines from API');
   } else {
     // New file or API failed - start with empty content
     editor.setValue('');
+    originalContent = ''; // Empty original
     editor.updateOptions({ readOnly: false });
     console.log('[GHmonaco] Starting with empty content (new file or API failed)');
   }
@@ -148,12 +151,30 @@ export async function injectMonacoEditor(
   // Hijack GitHub's native commit button to use our API
   hijackCommitButton(() => editor.getValue());
   
-  // Enable the commit button by simulating input in the hidden textarea
-  // This tricks GitHub's JS into thinking the editor has content
-  const textarea = elements.textarea;
-  if (textarea) {
-    // Sync content to textarea so GitHub enables the commit button
-    editor.onDidChangeModelContent(() => {
+  // Enable the commit button only if there are actual changes
+  const enableCommitButton = () => {
+    const button = document.querySelector<HTMLButtonElement>('button[data-variant="primary"]');
+    if (button && button.textContent?.toLowerCase().includes('commit')) {
+      const currentContent = editor.getValue();
+      const hasChanges = currentContent !== originalContent;
+      
+      if (hasChanges) {
+        button.disabled = false;
+        button.removeAttribute('disabled');
+      } else {
+        button.disabled = true;
+        button.setAttribute('disabled', '');
+      }
+    }
+  };
+  
+  // Check on content change
+  editor.onDidChangeModelContent(() => {
+    enableCommitButton();
+    
+    // Also sync to textarea if it exists (for compatibility)
+    const textarea = elements.textarea;
+    if (textarea) {
       const content = editor.getValue();
       const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
         window.HTMLTextAreaElement.prototype,
@@ -166,53 +187,44 @@ export async function injectMonacoEditor(
         textarea.value = content;
       }
 
-      // Dispatch events to enable commit button
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    
-    // Trigger initial update to enable button
-    setTimeout(() => {
-      textarea.value = editor.getValue();
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.dispatchEvent(new Event('change', { bubbles: true }));
-    }, 100);
-  }
+    }
+  });
+  
+  // Check button state initially
+  setTimeout(() => {
+    enableCommitButton();
+  }, 500);
 
   // Set up resize observer to adapt height
   const resizeObserver = new ResizeObserver(() => {
-    const lineCount = editor.getModel()?.getLineCount() || 20;
-    const lineHeight = editor.getOption(monaco.editor.EditorOption.lineHeight);
-    const padding = 32;
-    const minHeight = 300;
-    const maxHeight = window.innerHeight * 0.8;
-    const contentHeight = Math.min(Math.max(lineCount * lineHeight + padding, minHeight), maxHeight);
-    monacoContainer.style.height = `${contentHeight}px`;
     editor.layout();
   });
 
   resizeObserver.observe(monacoContainer);
 
-  // Initial height calculation
-  const lineCount = editor.getModel()?.getLineCount() || 20;
-  const lineHeight = editor.getOption(monaco.editor.EditorOption.lineHeight);
-  const padding = 32;
-  const minHeight = 300;
-  const maxHeight = window.innerHeight * 0.8;
-  const contentHeight = Math.min(Math.max(lineCount * lineHeight + padding, minHeight), maxHeight);
-  monacoContainer.style.height = `${contentHeight}px`;
-  editor.layout();
-
-  // Update height when content changes
-  editor.onDidChangeModelContent(() => {
-    const newLineCount = editor.getModel()?.getLineCount() || 20;
-    const newContentHeight = Math.min(
-      Math.max(newLineCount * lineHeight + padding, minHeight),
-      maxHeight
-    );
-    monacoContainer.style.height = `${newContentHeight}px`;
+  // Force height to fill available space
+  const updateHeight = () => {
+    // Get the viewport height and adjust
+    const viewportHeight = window.innerHeight;
+    const rect = monacoContainer.getBoundingClientRect();
+    const availableHeight = viewportHeight - rect.top - 200; // Leave space for footer/buttons
+    
+    if (availableHeight > 300) {
+      monacoContainer.style.height = `${availableHeight}px`;
+      monacoContainer.style.minHeight = `${availableHeight}px`;
+    } else {
+      monacoContainer.style.height = '500px';
+      monacoContainer.style.minHeight = '500px';
+    }
+    
     editor.layout();
-  });
+  };
+
+  // Update height on load and resize
+  updateHeight();
+  window.addEventListener('resize', updateHeight);
 
   return editor;
 }

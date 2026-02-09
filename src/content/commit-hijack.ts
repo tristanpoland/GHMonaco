@@ -9,30 +9,33 @@ import { parseRepoInfo, commitFile } from './github-api';
  */
 export function hijackCommitButton(getEditorContent: () => string): void {
   // GitHub's commit button selectors
+  // GitHub's commit button selectors
   const buttonSelectors = [
-    'button[type="submit"][name="commit-action"]',
+    'button[data-variant="primary"]', // New GitHub design
+    'button[name="commit-action"]',
     'button[data-testid="commit-changes-button"]',
-    'button:has-text("Commit changes")',
     '.js-blob-submit',
-    '[data-hydro-click*="commit"]',
   ];
 
   const findCommitButton = (): HTMLButtonElement | null => {
+    // Try each selector and check the text
     for (const selector of buttonSelectors) {
-      const button = document.querySelector<HTMLButtonElement>(selector);
-      if (button && button.textContent?.includes('Commit')) {
-        return button;
+      try {
+        const buttons = document.querySelectorAll<HTMLButtonElement>(selector);
+        for (const button of buttons) {
+          const text = button.textContent?.toLowerCase() || '';
+          // Must have "commit" in text and NOT be feedback button
+          if (text.includes('commit') && !text.includes('feedback')) {
+            console.log('[GHmonaco] Found button with selector:', selector, button);
+            return button;
+          }
+        }
+      } catch (e) {
+        // Skip invalid selectors
       }
     }
     
-    // Fallback: find any button with "Commit" text
-    const buttons = document.querySelectorAll<HTMLButtonElement>('button');
-    for (const button of buttons) {
-      if (button.textContent?.includes('Commit changes')) {
-        return button;
-      }
-    }
-    
+    console.log('[GHmonaco] No commit button found');
     return null;
   };
 
