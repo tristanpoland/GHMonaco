@@ -1,5 +1,5 @@
 {
-  "name": "ghmonace",
+  "name": "ghmonaco",
   "version": "1.0.0",
   "description": "Chrome extension that replaces GitHub's code editor with Monaco Editor",
   "private": true,
